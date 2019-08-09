@@ -7,9 +7,7 @@ OPTIONS:
 ------------------------------------------------------------\
 """
 
-from random import choices
-from Hyper_Heuristics.Acceptor import *
-from Hyper_Heuristics.Benchmark import *
+from Hyper_Heuristics.LeadingOne import *
 import sys, getopt, logging
 
 #==============================================================================
@@ -57,7 +55,7 @@ class CommandLine:
 
 class HH:
 
-    def __init__(self, acceptors, probabilities, benchmark):
+    def __init__(self, acceptors, probabilities, benchmark, max_step=-1):
         self.acceptors=acceptors
         self.probabilities=probabilities
         self.benchmark=benchmark
@@ -65,57 +63,45 @@ class HH:
         self.acceptor_steps={i:0 for i in self.acceptors}
         self.acceptor_accepts={i:0 for i in self.acceptors}
 
+        self.max_step=max_step
+        self.max_goal=0
+
+    def set_benchmark(self, benchmark):
+        self.benchmark=benchmark
+        self.num_step=0
+        self.acceptor_steps={i:0 for i in self.acceptors}
+        self.acceptor_accepts={i:0 for i in self.acceptors}
+
     def step(self):
         acceptor=choices(self.acceptors, weights=self.probabilities, k=1)[0]
-        mutation, goal_b, goal_a=self.benchmark.mutate()
+        is_accept, steps, goal_after=acceptor.accept(self.benchmark)
+        self.num_step+=steps
+        self.acceptor_steps[acceptor]+=steps
+        self.acceptor_accepts[acceptor]+=steps if is_accept else 0
 
-        mutated_bit=self.benchmark.current_solution[mutation]
-
-        is_accept=acceptor.accept(goal_b, goal_a)
-
-        self.num_step+=1
-        self.acceptor_steps[acceptor]+=1
         if is_accept:
-            self.benchmark.apply()
-            self.acceptor_accepts[acceptor]+=1
+            if self.max_goal<goal_after:
+                self.max_goal=goal_after
 
-        logging.debug("choosen acceptor: {} is accepted: {} with mutation {} on {}, goal_b: {}, goal_a: {}".
-              format(str(acceptor), is_accept, mutation, mutated_bit, goal_b, goal_a))
+        if self.num_step%100==0:
+            print("current solution at step {} is: {}".format(self.num_step, self.max_goal))
+
+
 
     def optimize(self):
+        self.max_goal=self.benchmark.goal(self.benchmark.current_solution)
         while not self.benchmark.reach_go():
-            logging.debug("current solution at step {} is {}:".format(self.num_step, self.benchmark._current_solution))
+            if self.max_step!=-1 and self.num_step>=self.max_step:
+                break
+
+            logging.debug("current solution at step {} is: {}".format(self.num_step, self.benchmark._current_solution))
             self.step()
 
+
     def stat(self):
-        print("steps by each acceptors is:", self.acceptor_steps)
-        print("accepts by each acceptors is:", self.acceptor_accepts)
+        logging.info("totoal number of steps:{}".format(self.num_step))
+        logging.info("steps by each acceptors is:{}".format(self.acceptor_steps))
+        logging.info("accepts by each acceptors is:{}".format(self.acceptor_accepts))
+        logging.info("max_goal ever achieved is {}".format(self.max_goal))
 
 
-def main():
-    am=AM()
-    oi=OI()
-
-    logging.basicConfig(filename="hh.log", level=logging.DEBUG,
-                        format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
-
-    init_bitstring=choices([0, 1], weights=[5, 1], k=10)
-    print("initial bitstring is:", init_bitstring)
-
-    # oneMax=OneMax(init_bitstring)
-    # hh_one=HH([am, oi], [1, 10], oneMax)
-    # hh_one.optimize()
-    # hh_one.stat()
-
-    # cliff=Cliff(init_bitstring, d=4)
-    # hh_cliff=HH([am, oi], [1, 1], cliff)
-    # hh_cliff.optimize()
-    # hh_cliff.stat()
-
-    jump=Jump(init_bitstring, m=4)
-    hh_jump=HH([am, oi], [1, 1], jump)
-    hh_jump.optimize()
-    hh_jump.stat()
-
-
-main()
