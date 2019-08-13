@@ -7,11 +7,11 @@ class Benchmark(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def mutate(self):
+    def mutates(self):
         pass
 
     @abc.abstractmethod
-    def apply(self):
+    def apply(self, mutations):
         pass
 
     @abc.abstractmethod
@@ -19,23 +19,19 @@ class Benchmark(abc.ABC):
         pass
 
     @property
-    @abc.abstractmethod
     def current_solution(self):
-        pass
+        return self._current_solution
 
     @current_solution.setter
-    @abc.abstractmethod
     def current_solution(self, current_solution):
-        pass
+        self._current_solution=current_solution
 
-    @property
-    @abc.abstractmethod
-    def current_mutation(self):
-        pass
-
-    @current_mutation.setter
-    @abc.abstractmethod
-    def current_mutation(self, current_mutation):
-        pass
+    # @property
+    # def current_mutation(self):
+    #     return self._current_mutation
+    #
+    # @current_mutation.setter
+    # def current_mutation(self, current_mutation):
+    #     self._current_mutation=current_mutation
 
 

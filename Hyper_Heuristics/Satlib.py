@@ -1,5 +1,4 @@
 import re, logging
-from random import choices
 from Hyper_Heuristics.LeadingOne import *
 
 class Sat(LeadingOne):
@@ -14,6 +13,8 @@ class Sat(LeadingOne):
 
         self.proc_contents(contents)
 
+    def reset_solution(self):
+        self.current_solution=choices([0, 1], weights=[1, 1], k=self._n)
 
     def proc_contents(self, contents):
 
@@ -29,8 +30,6 @@ class Sat(LeadingOne):
                     break
 
                 self._n, self.num_cla=int(match.group(1)), int(match.group(2))
-                self.current_solution=choices([0, 1], weights=[1, 1], k=self._n)
-                logging.debug("num_var:{}, num_cla:{}".format(self._n, self.num_cla))
 
             else:
                 iter=re.finditer("[-]?\d+", line)
@@ -47,9 +46,6 @@ class Sat(LeadingOne):
     def print_inner_var(self):
         logging.info("num_var:{}, num_cla:{}".format(self._n, self.num_cla))
         logging.info("self.clas:{}, self.vars:{}".format(self.clas, self.current_solution))
-
-    def apply(self):
-        self.current_solution[self.current_mutation]^=1
 
     def goal(self, solution):
         _goal=0
@@ -68,21 +64,5 @@ class Sat(LeadingOne):
 
     def reach_go(self):
         return True if self.goal(self.current_solution)==self.num_cla else False
-
-    @property
-    def current_solution(self):
-        return self._current_solution
-
-    @current_solution.setter
-    def current_solution(self, current_solution):
-        self._current_solution=current_solution
-
-    @property
-    def current_mutation(self):
-        return self._current_mutation
-
-    @current_mutation.setter
-    def current_mutation(self, current_mutation):
-        self._current_mutation=current_mutation
 
 

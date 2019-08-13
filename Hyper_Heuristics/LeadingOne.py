@@ -1,7 +1,6 @@
 
 import abc
-from random import choices
-from numpy.random import randint
+from random import choices, sample
 
 from Hyper_Heuristics.Benchmark import Benchmark
 
@@ -10,7 +9,6 @@ class LeadingOne(Benchmark, abc.ABC):
 
     def __init__(self, probability, n):
         self._n=n
-        self._current_mutation=None
         self.current_solution=choices([0, 1], weights=[1, probability], k=n)
         print("initial bitstring is:", self.current_solution)
 
@@ -19,39 +17,34 @@ class LeadingOne(Benchmark, abc.ABC):
         pass
 
     # flip-one
-    def mutate(self):
-        goal_before=self.goal(self._current_solution)
-        self.current_mutation=randint(0, self._n, size=1)[0]
+    def mutates(self):
+        return [self.flip_n(1)]
 
-        temp_solution=self.current_solution.copy()
-        temp_solution[self.current_mutation]^=1
-        goal_after=self.goal(temp_solution)
+    def flip_n(self, n):
 
-        mutated_bit=temp_solution[self.current_mutation]
+        def flip():
+            # goal_before=self.goal(self._current_solution)
+            mutations=sample(range(0, self._n), n)
 
-        return self.current_mutation, mutated_bit, goal_before, goal_after
+            temp_solution=self.current_solution.copy()
+            for mutation in mutations:
+                temp_solution[mutation]^=1
+            goal_after=self.goal(temp_solution)
 
-    def apply(self):
-        self.current_solution[self.current_mutation]^=1
+            mutated_bits=[temp_solution[i] for i in mutations]
+
+            return mutations, mutated_bits, goal_after
+
+        return flip
+
+
+    def apply(self, mutations):
+        for mutation in mutations:
+            self.current_solution[mutation]^=1
 
     def reach_go(self):
         return True if self.current_solution.count(1)==self._n else False
 
-    @property
-    def current_solution(self):
-        return self._current_solution
-
-    @current_solution.setter
-    def current_solution(self, current_solution):
-        self._current_solution=current_solution
-
-    @property
-    def current_mutation(self):
-        return self._current_mutation
-
-    @current_mutation.setter
-    def current_mutation(self, current_mutation):
-        self._current_mutation=current_mutation
 
 #==============================================================================
 # OneMax Benchmark
