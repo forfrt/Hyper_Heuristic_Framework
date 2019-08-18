@@ -11,6 +11,7 @@ class Sat(LeadingOne):
         contents=f.readlines()
         f.close()
 
+        self.current_solution=None
         self.proc_contents(contents)
 
     def reset_solution(self):

@@ -2,11 +2,19 @@
 ------------------------------------------------------------
 USE: python <PROGNAME> (options)
 OPTIONS:
-    -h : print this help message
-    -b BENCHMARK : the benchmark to be tested on (Benchmark in {OneMax, Cliff, Jump, default: OneMax}
+    -b --benchmark BENCHMARK : the benchmark to be tested on (Benchmark in {OneMax, Cliff, Jump, Sat default: OneMax}
+    -s --show : show the statistic bar chart based on pervious data
+    --acceptors : a list of acceptors chosen to be selected
+    --acceptor_probs : probabilities of given acceptors
+    --sat_files : CNF files if SAT benchmark is selected
+    --num_instance : number of instance to be tested
+    --num_run : number of run for each problem instance
+    --log_file : logging file
+    --dump_file : file that store the json.dumps() result
+    --max_mutation : maximum number of mutation
 ------------------------------------------------------------\
 """
-import logging, glob, json
+import logging, glob, json, argparse, pathlib
 import matplotlib.pyplot as plt
 from math import ceil
 import numpy as np
@@ -19,47 +27,27 @@ from Hyper_Heuristics.LeadingOne import *
 #==============================================================================
 # Command line processing
 
-class CommandLine:
-    def __init__(self):
-        opts, args = getopt.getopt(sys.argv[1:], 'hs:')
-        opts = dict(opts)
-        self.exit = True
+def proc_cmd():
+    cli=argparse.ArgumentParser()
+    cli.add_argument("-b", "--benchmark",
+                     help="BENCHMARK : the benchmark to be tested on (Benchmark in {OneMax, Cliff, Jump, Sat default: Sat}")
+    cli.add_argument("-s", "--show", action="store_true", help="show the statistic bar chart based on pervious data")
+    cli.add_argument("--sat_files", default="./sat/", help="CNF files if SAT benchmark is selected")
+    cli.add_argument("--acceptors", nargs="+", default=["am", "oi"], help="a list of acceptors chosen to be selected")
+    cli.add_argument("--acceptor_probs", nargs="+", type=float, default=[1, 1], help="probabilities of given acceptors")
+    cli.add_argument("--max_mutation", type=int, default="200000", help="maximum number of mutation")
+    cli.add_argument("--num_instance", type=int, default=100, help="number of instance to be tested")
+    cli.add_argument("--num_run", type=int, default=100, help="number of run for each problem instance")
+    cli.add_argument("--log_file", default="hh.log", help="logging file")
+    cli.add_argument("--dump_file", default="hh_data.dump", help="file that store the json.dumps() result")
 
-        if '-h' in opts:
-            self.printHelp()
-            return
+    args=cli.parse_args()
 
-        if '-s' in opts:
-            if opts['-s'] in ('char', 'word'):
-                self.token = opts['-s']
-            else:
-                warning = (
-                              "*** ERROR: symbol for Huffman coding (opt: -s TOKEN)! ***\n"
-                              "    -- value (%s) not recognised!\n"
-                              "    -- must be one of: char / word "
-                          )  % (opts['-s'])
-                print(warning, file=sys.stderr)
-                self.printHelp()
-                return
-        else:
-            self.token = 'char'
 
-        if len(args) == 1:
-            self.infile = args[0]
-        else:
-            print('\n*** ERROR: must specify precisely 1 arg files (infile) ***', file=sys.stderr)
-            self.printHelp()
-
-        self.exit = False
-
-    def printHelp(self):
-        progname = sys.argv[0]
-        progname = progname.split('/')[-1] # strip off extended path
-        help = __doc__.replace('<PROGNAME>', progname, 1)
-        print(help, file=sys.stderr)
+    return cli, args
 
 def test_leadingone():
-    oneMax=OneMax(probability=0.2, n=100)
+    oneMax=OneMax(n=100, probability=0.2)
     hh_one=HH(["am", "oi"], [0, 1], oneMax)
     hh_one.optimize()
     hh_one.stat()
@@ -77,28 +65,55 @@ def test_leadingone():
 
 def main():
 
-    logging.basicConfig(filename="hh.log", level=logging.INFO,
+    # test_leadingone()
+    cli, args=proc_cmd()
+    if args.benchmark.lower() in ["onemax", "cliff", "jump", "sat"]:
+        if args.benchmark.lower()=='sat':
+            if args.sat_files:
+                p=pathlib.Path(args.sat_files)
+                if not (p.exists() and p.is_dir()):
+
+                    warning = ( "*** ERROR: directory for sat files (opt: --sat_files SAT_DIR default: ./sat)! ***\n"
+                                "    -- path (%s) not exists!\n"
+                                "    -- must be a existent directory"
+                                )  % (args.sat_files)
+                    print(warning, file=sys.stderr)
+                    cli.print_help()
+                    sys.exit()
+    else:
+        warning = (
+                      "*** ERROR: benchmark for Hyper-Heuristic (opt: --benchmark BENCHMARK default: Sat)! ***\n"
+                      "    -- value (%s) not recognised!\n"
+                      "    -- must be one of: OneMax / Cliff / Jump / Sat "
+                  )  % (args.benchmark)
+        print(warning, file=sys.stderr)
+        cli.print_help()
+        sys.exit()
+
+
+    logging.basicConfig(filename=args.log_file, level=logging.INFO,
                         format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
 
-    # test_leadingone()
+    logging.info(args)
+    # max_mutate=1600000
+    # num_run=10
+    # num_instance=20
+    num_per_subp=5
+    # dump_file='uf20_2'
 
-    max_mutate=2000
-    num_instance=100
-    num_run=100
-    hh_sat=HH(["AM", "OI"], [0.1, 0.9], None, max_mutate) # 2/n
-    uf_num, uf_goal, uf_mutate=opt_sat('./satlib/uf20/*.cnf', hh_sat, num_instance, num_run)
+    hh_sat=HH(args.acceptors, args.acceptor_probs, None, args.max_mutation) # 2/n
+    uf_num, uf_goal, uf_mutate=opt_sat(args.sat_files, hh_sat, args.num_instance, args.num_run)
 
-    dump_file='test.log'
+    dump_to_file(args.dump_file, uf_num=uf_num, uf_goal=uf_goal, uf_mutate=uf_mutate)
 
-    dump_to_file(dump_file, uf_num=uf_num, uf_goal=uf_goal, uf_mutate=uf_mutate)
-    uf_num, uf_goal, uf_mutate=loads_from_file(dump_file, 3)
+    uf_num, uf_goal, uf_mutate=loads_from_file(args.dump_file, 3)
 
-
-    average_goal, average_mutation=draw_bar_charts(uf_num, uf_goal, uf_mutate)
-    dump_to_file(dump_file, average_goal=average_goal, average_mutation=average_mutation)
+    if args.show:
+        average_goal, average_mutation=draw_bar_charts(num_per_subp, uf_num, uf_goal, uf_mutate)
+        dump_to_file(args.dump_file, average_goal=average_goal, average_mutation=average_mutation)
 
 def dump_to_file(filename, **kwargs):
-    with open(filename, 'w') as f:
+    with open(filename, 'a') as f:
         for k, v in kwargs.items():
             f.write(k+'\n')
             f.write(json.dumps(v)+'\n')
@@ -113,9 +128,9 @@ def loads_from_file(filename, num_value):
 
     return tuple(res)
 
-def opt_sat(file_pattern, hh_sat, num_instance, num_run):
+def opt_sat(dir_name, hh_sat, num_instance, num_run):
 
-    uf_li=glob.glob(file_pattern)
+    uf_li=list(pathlib.Path(dir_name).glob("**/*.cnf"))
     uf_num=[[0]*num_instance for _ in range(2)]
     uf_mutate=[[0]*num_instance for _ in range(2)]
     uf_goal=[[0]*num_instance for _ in range(2)]
@@ -123,14 +138,13 @@ def opt_sat(file_pattern, hh_sat, num_instance, num_run):
     for instance_id in range(num_instance):
         logging.info("======NEXT INSTANCE:{}======".format(instance_id))
 
-        sat=Sat(uf_li[instance_id])
+        sat=Sat(str(uf_li[instance_id]))
+        sat.print_inner_var()
 
         for i in range(num_run):
 
             logging.info("------NEXT RUN:{}------".format(i))
-
             sat.reset_solution()
-            sat.print_inner_var()
             hh_sat.reset_benchmark(sat)
             hh_sat.optimize()
             hh_sat.stat()
@@ -149,14 +163,12 @@ def opt_sat(file_pattern, hh_sat, num_instance, num_run):
     return uf_num, uf_goal, uf_mutate
 
 
-def draw_bar_charts(uf_num, uf_goal, uf_mutate):
+def draw_bar_charts(inst_per_subp, uf_num, uf_goal, uf_mutate):
 
-    inst_per_subp=10
     width=0.35
 
     average_goal=list()
     average_mutation=list()
-
 
     fig=plt.figure()
     fig.suptitle("Average goal/step for each instance")
@@ -232,9 +244,6 @@ def autolabel(ax, rects, xpos='center'):
                     xytext=(offset[xpos]*3, 3),  # use 3 points offset
                     textcoords="offset points",  # in both directions
                     ha=ha[xpos], va='bottom')
-
-
-
 
 
 if __name__ == '__main__':

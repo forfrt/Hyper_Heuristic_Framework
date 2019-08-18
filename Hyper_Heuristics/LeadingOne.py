@@ -7,7 +7,7 @@ from Hyper_Heuristics.Benchmark import Benchmark
 
 class LeadingOne(Benchmark, abc.ABC):
 
-    def __init__(self, probability, n):
+    def __init__(self, n, probability=1):
         self._n=n
         self.current_solution=choices([0, 1], weights=[1, probability], k=n)
         print("initial bitstring is:", self.current_solution)
@@ -51,7 +51,7 @@ class LeadingOne(Benchmark, abc.ABC):
 
 class OneMax(LeadingOne):
 
-    def __init__(self, probability, n):
+    def __init__(self, n, probability=1):
         super().__init__(probability, n)
 
     def goal(self, solution):
@@ -64,7 +64,7 @@ class OneMax(LeadingOne):
 
 class Cliff(LeadingOne):
 
-    def __init__(self, probability, n, d):
+    def __init__(self, n, d, probability=1):
         super().__init__(probability, n)
         self._d=d
 
@@ -81,7 +81,7 @@ class Cliff(LeadingOne):
 
 class Jump(LeadingOne):
 
-    def __init__(self, probability, n, m):
+    def __init__(self, n, m, probability=1):
         super().__init__(probability, n)
         self._m=m
 
