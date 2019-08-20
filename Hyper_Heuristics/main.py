@@ -1,6 +1,11 @@
 """\
 ------------------------------------------------------------
-USE: python <PROGNAME> (options)
+USAGE: <PROGNAME> [-h] [-b BENCHMARK] [-s] [--sat_files SAT_FILES]
+               [--acceptors ACCEPTORS [ACCEPTORS ...]]
+               [--acceptor_probs ACCEPTOR_PROBS [ACCEPTOR_PROBS ...]]
+               [--max_mutation MAX_MUTATION] [--num_instance NUM_INSTANCE]
+               [--num_run NUM_RUN] [--log_file LOG_FILE]
+               [--dump_file DUMP_FILE]
 OPTIONS:
     -b --benchmark BENCHMARK : the benchmark to be tested on (Benchmark in {OneMax, Cliff, Jump, Sat default: OneMax}
     -s --show : show the statistic bar chart based on pervious data
@@ -14,7 +19,9 @@ OPTIONS:
     --max_mutation : maximum number of mutation
 ------------------------------------------------------------\
 """
-import logging, glob, json, argparse, pathlib
+import logging, json, argparse, pathlib
+from statistics import mean, median
+
 import matplotlib.pyplot as plt
 from math import ceil
 import numpy as np
@@ -31,7 +38,7 @@ def proc_cmd():
     cli=argparse.ArgumentParser()
     cli.add_argument("-b", "--benchmark",
                      help="BENCHMARK : the benchmark to be tested on (Benchmark in {OneMax, Cliff, Jump, Sat default: Sat}")
-    cli.add_argument("-s", "--show", action="store_true", help="show the statistic bar chart based on pervious data")
+    cli.add_argument("--benchmark_size", default="100", help="benchmark problem size if one of [OneMax, Cliff, Jump] is selected")
     cli.add_argument("--sat_files", default="./sat/", help="CNF files if SAT benchmark is selected")
     cli.add_argument("--acceptors", nargs="+", default=["am", "oi"], help="a list of acceptors chosen to be selected")
     cli.add_argument("--acceptor_probs", nargs="+", type=float, default=[1, 1], help="probabilities of given acceptors")
@@ -40,13 +47,13 @@ def proc_cmd():
     cli.add_argument("--num_run", type=int, default=100, help="number of run for each problem instance")
     cli.add_argument("--log_file", default="hh.log", help="logging file")
     cli.add_argument("--dump_file", default="hh_data.dump", help="file that store the json.dumps() result")
+    cli.add_argument("-s", "--show", action="store_true", help="show the statistic bar chart based on pervious data")
 
     args=cli.parse_args()
 
-
     return cli, args
 
-def test_leadingone():
+def test_leadingone(benchmark):
     oneMax=OneMax(n=100, probability=0.2)
     hh_one=HH(["am", "oi"], [0, 1], oneMax)
     hh_one.optimize()
@@ -67,19 +74,25 @@ def main():
 
     # test_leadingone()
     cli, args=proc_cmd()
+    logging.basicConfig(filename=args.log_file, level=logging.INFO,
+                        format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
+    logging.info(args)
+
     if args.benchmark.lower() in ["onemax", "cliff", "jump", "sat"]:
         if args.benchmark.lower()=='sat':
-            if args.sat_files:
-                p=pathlib.Path(args.sat_files)
-                if not (p.exists() and p.is_dir()):
-
-                    warning = ( "*** ERROR: directory for sat files (opt: --sat_files SAT_DIR default: ./sat)! ***\n"
-                                "    -- path (%s) not exists!\n"
-                                "    -- must be a existent directory"
-                                )  % (args.sat_files)
-                    print(warning, file=sys.stderr)
-                    cli.print_help()
-                    sys.exit()
+            p=pathlib.Path(args.sat_files)
+            if not (p.exists() and p.is_dir()):
+                warning = ( "*** ERROR: directory for sat files (opt: --sat_files SAT_DIR default: ./sat)! ***\n"
+                            "    -- path (%s) not exists!\n"
+                            "    -- must be a existent directory"
+                            )  % (args.sat_files)
+                print(warning, file=sys.stderr)
+                cli.print_help()
+                sys.exit()
+            else:
+                test_sat(args)
+        else:
+            test_leadingone(args.benchmark, args.benchmark_size)
     else:
         warning = (
                       "*** ERROR: benchmark for Hyper-Heuristic (opt: --benchmark BENCHMARK default: Sat)! ***\n"
@@ -90,50 +103,45 @@ def main():
         cli.print_help()
         sys.exit()
 
+    if args.dump_file and args.show:
+        draw_sat_stat_graph(args.dump_file)
 
-    logging.basicConfig(filename=args.log_file, level=logging.INFO,
-                        format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
 
-    logging.info(args)
-    # max_mutate=1600000
-    # num_run=10
-    # num_instance=20
-    num_per_subp=5
-    # dump_file='uf20_2'
+
+def test_sat(args):
 
     hh_sat=HH(args.acceptors, args.acceptor_probs, None, args.max_mutation) # 2/n
-    uf_num, uf_goal, uf_mutate=opt_sat(args.sat_files, hh_sat, args.num_instance, args.num_run)
+    (uf_mutation, uf_goal), (uf_num, uf_global_ind, uf_mutation_li, uf_goal_li)=\
+        opt_sat(args.sat_files, hh_sat, args.num_instance, args.num_run)
 
-    dump_to_file(args.dump_file, uf_num=uf_num, uf_goal=uf_goal, uf_mutate=uf_mutate)
+    dump_to_file(args.dump_file, uf_mutation=uf_mutation, uf_goal=uf_goal)
+    dump_to_file(args.dump_file, uf_num=uf_num, uf_global=uf_global_ind, uf_mutation_li=uf_mutation_li, uf_goal_li=uf_goal_li)
 
-    uf_num, uf_goal, uf_mutate=loads_from_file(args.dump_file, 3)
+    (average_mutation, average_goal), (median_mutation, median_goal)=calculate_stat(uf_mutation_li, uf_goal_li)
 
-    if args.show:
-        average_goal, average_mutation=draw_bar_charts(num_per_subp, uf_num, uf_goal, uf_mutate)
-        dump_to_file(args.dump_file, average_goal=average_goal, average_mutation=average_mutation)
+    dump_to_file(args.dump_file, average_mutation=average_mutation, average_goal=average_goal,
+                 median_mutation=median_mutation, median_goal=median_goal)
 
-def dump_to_file(filename, **kwargs):
-    with open(filename, 'a') as f:
-        for k, v in kwargs.items():
-            f.write(k+'\n')
-            f.write(json.dumps(v)+'\n')
+def draw_sat_stat_graph(dump_file):
+    num_per_subp=5
+    uf_num, average_mutation, average_goal, median_mutation, median_goal=\
+        loads_from_file(dump_file, "uf_num", "average_mutation", "average_goal", "median_mutation", "median_goal")
+    draw_bar_charts(num_per_subp, uf_num, average_mutation, average_goal, median_mutation, median_goal)
 
-def loads_from_file(filename, num_value):
-    res=list()
-    with open(filename, 'r') as f:
-        tmp_value=None
-        for i in range(num_value):
-            f.readline()
-            res.append(json.loads(f.readline()))
+        # average_goal, average_mutation=draw_bar_charts(num_per_subp, uf_num, uf_goal, uf_mutate)
 
-    return tuple(res)
 
 def opt_sat(dir_name, hh_sat, num_instance, num_run):
 
     uf_li=list(pathlib.Path(dir_name).glob("**/*.cnf"))
+
+    uf_mutation=[[0]*num_run for _ in range(num_instance)]
+    uf_goal=[[0]*num_run for _ in range(num_instance)]
+
     uf_num=[[0]*num_instance for _ in range(2)]
-    uf_mutate=[[0]*num_instance for _ in range(2)]
-    uf_goal=[[0]*num_instance for _ in range(2)]
+    uf_global_ind=[list() for _ in range(2)]
+    uf_mutation_li=[[list() for _ in range(num_instance)] for _ in range(2)]
+    uf_goal_li=[[list() for _ in range(num_instance)] for _ in range(2)]
 
     for instance_id in range(num_instance):
         logging.info("======NEXT INSTANCE:{}======".format(instance_id))
@@ -141,34 +149,60 @@ def opt_sat(dir_name, hh_sat, num_instance, num_run):
         sat=Sat(str(uf_li[instance_id]))
         sat.print_inner_var()
 
-        for i in range(num_run):
+        for run_id in range(num_run):
 
-            logging.info("------NEXT RUN:{}------".format(i))
+            logging.info("------NEXT RUN:{}------".format(run_id))
             sat.reset_solution()
             hh_sat.reset_benchmark(sat)
             hh_sat.optimize()
             hh_sat.stat()
 
+            uf_mutation[instance_id][run_id]=hh_sat.num_mutate
+            uf_goal[instance_id][run_id]=hh_sat.max_goal
+
             # find global optima within max_mutate
             if hh_sat.max_goal==sat.num_cla:
                 uf_num[0][instance_id]+=1
-                uf_goal[0][instance_id]+=sat.num_cla
-                uf_mutate[0][instance_id]+=hh_sat.num_mutate
+                uf_global_ind[0].append((instance_id, run_id))
+                uf_mutation_li[0][instance_id].append(hh_sat.num_mutate)
+                uf_goal_li[0][instance_id].append(hh_sat.max_goal)
             # didn't find global optima within max_mutate
             else:
                 uf_num[1][instance_id]+=1
-                uf_goal[1][instance_id]+=hh_sat.max_goal
-                uf_mutate[1][instance_id]+=hh_sat.max_mutate
+                uf_global_ind[1].append((instance_id, run_id))
+                uf_mutation_li[1][instance_id].append(hh_sat.num_mutate)
+                uf_goal_li[1][instance_id].append(hh_sat.max_goal)
 
-    return uf_num, uf_goal, uf_mutate
+    return (uf_mutation, uf_goal), (uf_num, uf_global_ind, uf_mutation_li, uf_goal_li)
+
+def calculate_stat(uf_mutation_li, uf_goal_li):
+    average_goal=[list() for _ in range(2)]
+    median_goal=[list() for _ in range(2)]
+    average_mutation=[list() for _ in range(2)]
+    median_mutation=[list() for _ in range(2)]
+
+    for instance_id in range(len(uf_mutation_li[0])):
+        for suc_id in range(2):
+            if uf_mutation_li[suc_id][instance_id]:
+                average_mutation[suc_id].append(mean(uf_mutation_li[suc_id][instance_id]))
+                median_mutation[suc_id].append(median(uf_mutation_li[suc_id][instance_id]))
+            else:
+                average_mutation[suc_id].append(0)
+                median_mutation[suc_id].append(0)
+
+            if uf_goal_li[suc_id][instance_id]:
+                average_goal[suc_id].append(mean(uf_goal_li[suc_id][instance_id]))
+                median_goal[suc_id].append(median(uf_goal_li[suc_id][instance_id]))
+            else:
+                average_goal[suc_id].append(0)
+                median_goal[suc_id].append(0)
+
+    return (average_mutation, average_goal), (median_mutation, median_goal)
 
 
-def draw_bar_charts(inst_per_subp, uf_num, uf_goal, uf_mutate):
+def draw_bar_charts(inst_per_subp, uf_num, average_mutation, average_goal, median_mutation, median_goal):
 
     width=0.35
-
-    average_goal=list()
-    average_mutation=list()
 
     fig=plt.figure()
     fig.suptitle("Average goal/step for each instance")
@@ -188,9 +222,6 @@ def draw_bar_charts(inst_per_subp, uf_num, uf_goal, uf_mutate):
         autolabel(ax_lst[int(instance_subp_id/inst_per_subp)][0], time_glo, "left")
         autolabel(ax_lst[int(instance_subp_id/inst_per_subp)][0], time_loc, "right")
 
-        average_goal_subp=list()
-        average_mutation_subp=list()
-
         for id in range(inst_per_subp):
             instance_id=instance_subp_id+id
 
@@ -199,27 +230,16 @@ def draw_bar_charts(inst_per_subp, uf_num, uf_goal, uf_mutate):
 
             if uf_num[0][instance_id]!=0:
                 print("The average mutation to achieve global optima {} is {}".
-                    format(uf_goal[0][instance_id]/uf_num[0][instance_id], uf_mutate[0][instance_id]/uf_num[0][instance_id]))
-                average_mutation_subp.append(uf_mutate[0][instance_id]/uf_num[0][instance_id])
-            else:
-                average_mutation_subp.append(0)
+                    format(average_goal[0][instance_id], average_mutation[0][instance_id]))
 
             if uf_num[1][instance_id]!=0:
                 print("The average maximum goal achieved within {} steps is {}".
-                    format(uf_mutate[1][instance_id]/uf_num[1][instance_id], uf_goal[1][instance_id]/uf_num[1][instance_id]))
-                average_goal_subp.append(uf_goal[1][instance_id]/uf_num[1][instance_id])
-            else:
-                average_goal_subp.append(0)
+                    format(average_mutation[1][instance_id], average_goal[1][instance_id]))
 
-        ax_lst[int(instance_subp_id/inst_per_subp), 1].bar(x_ind,
-                                                 np.array(average_goal_subp), width,
-                                                 label="")
-        ax_lst[int(instance_subp_id/inst_per_subp), 2].bar(x_ind,
-                                                 np.array(average_mutation_subp), width,
-                                                 label="")
-
-        average_goal.extend(average_goal_subp)
-        average_mutation.extend(average_mutation_subp)
+        ax_lst[int(instance_subp_id/inst_per_subp), 1].\
+            bar(x_ind, np.array(average_goal[1][instance_subp_id:instance_subp_id+inst_per_subp]), width, label="")
+        ax_lst[int(instance_subp_id/inst_per_subp), 2].\
+            bar(x_ind, np.array(average_mutation[0][instance_subp_id:instance_subp_id+inst_per_subp]), width, label="")
 
     fig.show()
 
@@ -245,6 +265,23 @@ def autolabel(ax, rects, xpos='center'):
                     textcoords="offset points",  # in both directions
                     ha=ha[xpos], va='bottom')
 
+def dump_to_file(filename, **kwargs):
+    with open(filename, 'a') as f:
+        for k, v in kwargs.items():
+            f.write(k+'\n')
+            f.write(json.dumps(v)+'\n')
+
+def loads_from_file(filename, *argv):
+    res=[None]*len(argv)
+    with open(filename, 'r') as f:
+        while True:
+            line=f.readline()
+            if not line:
+                break
+            if line[:-1].lower() in argv:
+                res[argv.index(line[:-1].lower())]=json.loads(f.readline())
+
+    return tuple(res)
 
 if __name__ == '__main__':
     main()
