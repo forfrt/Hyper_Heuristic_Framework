@@ -16,26 +16,39 @@ class LeadingOne(Benchmark, abc.ABC):
     def goal(self, solution):
         pass
 
+    def mutate(self, mutate_fun_name, *args):
+        try:
+            fn=getattr(self, mutate_fun_name)
+            if callable(fn):
+                return fn(*args)
+            else:
+                temp_fn=getattr(self, self.mutates()[0][0])
+                return temp_fn(*self.mutates()[0][1])
+        except AttributeError:
+            raise NotImplementedError(
+                "Class `{}` does not implement `{}`".format(self.__class__.__name__, mutate_fun_name))
+
     # flip-one
     def mutates(self):
-        return [self.flip_n(1)]
+        # return [self.flip_n(1)]
+        return [("flip_n", [1])]
 
     def flip_n(self, n):
+        # Multiprocessing need pickle to send to its worker-processes but Nested function cannot be pickled
 
-        def flip():
-            # goal_before=self.goal(self._current_solution)
-            mutations=sample(range(0, self._n), n)
+        # def flip():
+        mutations=sample(range(0, self._n), n)
 
-            temp_solution=self.current_solution.copy()
-            for mutation in mutations:
-                temp_solution[mutation]^=1
-            goal_after=self.goal(temp_solution)
+        temp_solution=self.current_solution.copy()
+        for mutation in mutations:
+            temp_solution[mutation]^=1
+        goal_after=self.goal(temp_solution)
 
-            mutated_bits=[temp_solution[i] for i in mutations]
+        mutated_bits=[temp_solution[i] for i in mutations]
 
-            return mutations, mutated_bits, goal_after
+        return mutations, mutated_bits, goal_after
 
-        return flip
+        # return flip
 
 
     def apply(self, mutations):
@@ -52,7 +65,9 @@ class LeadingOne(Benchmark, abc.ABC):
 class OneMax(LeadingOne):
 
     def __init__(self, n, probability=1):
-        super().__init__(probability, n)
+        n=int(n)
+        probability=float(probability)
+        super().__init__(n, probability)
 
     def goal(self, solution):
         return solution.count(1)
@@ -65,7 +80,7 @@ class OneMax(LeadingOne):
 class Cliff(LeadingOne):
 
     def __init__(self, n, d, probability=1):
-        super().__init__(probability, n)
+        super().__init__(n, probability)
         self._d=d
 
     def goal(self, solution):
@@ -82,7 +97,7 @@ class Cliff(LeadingOne):
 class Jump(LeadingOne):
 
     def __init__(self, n, m, probability=1):
-        super().__init__(probability, n)
+        super().__init__(n, probability)
         self._m=m
 
     def goal(self, solution):

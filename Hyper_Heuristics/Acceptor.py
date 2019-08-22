@@ -20,24 +20,28 @@ class Acceptor(abc.ABC):
         self._benchmark=benchmark
 
     @staticmethod
-    def acceptor_factory(class_name, benchmark):
-        for cls in Acceptor.__subclasses__():
+    def acceptor_factory(class_name, *args):
+        for cls in Acceptor.all_subclasses(Acceptor):
             if cls.__name__.lower()==class_name.lower():
-                return cls(benchmark)
+                return cls(*args)
 
         return None
 
+    @staticmethod
+    def all_subclasses(cls):
+        return set(cls.__subclasses__()). \
+            union([s for c in cls.__subclasses__() for s in Acceptor.all_subclasses(c)])
 
 
 class AM(Acceptor):
     def accept(self):
         mutate_fun=choice(self.benchmark.mutates())
         goal_b=self.benchmark.goal(self.benchmark.current_solution)
-        mutations, mutated_bits, goal_a=mutate_fun()
+        mutations, mutated_bits, goal_a=self.benchmark.mutate(mutate_fun[0], *mutate_fun[1])
         self.benchmark.apply(mutations)
-        logging.debug("chosen mutation operator: {} IS NOT ACCEPTED by acceptor: {} "
+        logging.debug("chosen mutation operator: {} IS ACCEPTED by acceptor: {} "
                       "with mutations {} on {}, goal_a: {}".
-                      format(mutate_fun.__name__, "AM",
+                      format(mutate_fun[0], "AM",
                              mutations, mutated_bits, goal_a))
 
         return True, 1, goal_a
@@ -49,18 +53,18 @@ class OI(Acceptor):
     def accept(self):
         mutate_fun=choice(self.benchmark.mutates())
         goal_b=self.benchmark.goal(self.benchmark.current_solution)
-        mutations, mutated_bits, goal_a=mutate_fun()
+        mutations, mutated_bits, goal_a=self.benchmark.mutate(mutate_fun[0], *mutate_fun[1])
         if goal_a>goal_b:
             self.benchmark.apply(mutations)
             logging.debug("chosen mutation operator: {} IS ACCEPTED by acceptor: {} "
                           "with mutations {} on {}, goal_a: {}".
-                          format(mutate_fun.__name__, "OI",
+                          format(mutate_fun[0], "OI",
                                  mutations, mutated_bits, goal_a))
             return True, 1, goal_a
 
         logging.debug("chosen mutation operator: {} IS NOT ACCEPTED by acceptor: {} "
                       "with mutations {} on {}, goal_a: {}".
-                      format(mutate_fun.__name__, "OI",
+                      format(mutate_fun[0], "OI",
                              mutations, mutated_bits, goal_a))
         return False, 1, goal_a
 
@@ -71,7 +75,7 @@ class IE(Acceptor):
     def accept(self):
         mutate_fun=choice(self.benchmark.mutates())
         goal_b=self.benchmark.goal(self.benchmark.current_solution)
-        mutations, mutated_bits, goal_a=mutate_fun()
+        mutations, mutated_bits, goal_a=self.benchmark.mutate(mutate_fun[0], *mutate_fun[1])
         if goal_a>=goal_b:
             self.benchmark.apply(mutations)
             logging.debug("chosen mutation operator: {} IS ACCEPTED by acceptor: {} "
@@ -99,27 +103,33 @@ class Greedy(Acceptor):
 
     def accept(self):
         goal_b=self.benchmark.goal(self.benchmark.current_solution)
-        multi_result=[self.pool.apply_async(self.benchmark.mutates()[i], ()) for i in range(self.num_mutation)]
+        mutate_para=self.benchmark.mutates()
+        # multi_result=[self.pool.apply_async(self.benchmark.mutate, (mutate_para[i][0], *mutate_para[i][1], ))
+        #               for i in range(self.num_mutation)]
+        multi_result=list()
+        for i in range(self.num_mutation):
+            multi_result.append(self.pool.apply_async(self.benchmark.mutate, (mutate_para[i][0], *mutate_para[i][1])))
 
         acceptable_index=list()
         # acceptable_mutation=list()
         # acceptable_goal_a=list()
-        self.pool.join()
+        # self.pool.close()
+        # self.pool.join()
 
         for i in len(multi_result):
-            mutations, mutated_bits, goal_a=multi_result[i].get()
+            mutations, mutated_bits, goal_a=multi_result[i].get(timeout=1)
             if goal_a>=goal_b:
-                acceptable_index.append(mutations)
+                acceptable_index.append(i)
                 # acceptable_goal_a.append(goal_a)
                 # acceptable_mutation.append(mutations)
                 logging.debug("chosen mutation operator: {} COULD be ACCEPTED by acceptor: {} " 
                               "with mutations {} on {}, goal_a: {}".
-                              format(self.benchmark.mutates()[i].__name__, "Greedy",
+                              format(self.benchmark.mutates()[i][0], "Greedy",
                                      mutations, mutated_bits, goal_a))
             else:
                 logging.debug("chosen mutation operator: {} CANNOT be ACCEPTED by acceptor: {} "
                               "with mutations {} on {}, goal_a: {}".
-                              format(self.benchmark.mutates()[i].__name__, "Greedy",
+                              format(self.benchmark.mutates()[i][0], "Greedy",
                                      mutations, mutated_bits, goal_a))
 
         if acceptable_index:
@@ -129,7 +139,7 @@ class Greedy(Acceptor):
 
             logging.debug("chosen mutation operator: {} is ACCEPTED by acceptor: {} "
                           "with mutations {} on {}, goal_a: {}".
-                          format(self.benchmark.mutates()[selected_index].__name__, "Greedy",
+                          format(self.benchmark.mutates()[selected_index][0], "Greedy",
                                  selected_result[0], selected_result[1], selected_result[2]))
             return True, len(multi_result), selected_result[2]
         else:
@@ -147,23 +157,29 @@ class GeneralisedGreedy(Greedy):
 
     def accept(self):
         goal_b=self.benchmark.goal(self.benchmark.current_solution)
-        multi_result=[self.pool.apply_async(self.benchmark.mutates()[i], ()) for i in range(self.num_mutation)]
+        mutate_para=self.benchmark.mutates()
+        # multi_result=[self.pool.apply_async(self.benchmark.mutate, (mutate_para[i][0], *mutate_para[i][1]))
+        #               for i in range(self.num_mutation)]
+        multi_result=list()
+        for i in range(self.num_mutation):
+            multi_result.append(self.pool.apply_async(self.benchmark.mutate, (mutate_para[i][0], *mutate_para[i][1])))
 
         acceptable_index=list()
         # acceptable_mutation=list()
         # acceptable_goal_a=list()
-        self.pool.join()
+        # self.pool.close()
+        # self.pool.join()
 
-        for i in len(multi_result):
-            mutations, mutated_bits, goal_a=multi_result[i].get()
+        for i in range(len(multi_result)):
+            mutations, mutated_bits, goal_a=multi_result[i].get(timeout=1)
             if goal_a>=goal_b:
-                acceptable_index.append(mutations)
+                acceptable_index.append(i)
                 # acceptable_goal_a.append(goal_a)
                 # acceptable_mutation.append(mutations)
-                logging.debug("Greedy could accept mutation{}, goal_b: {}, goal_a: {}".
+                logging.info("GeneralisedGreedy could accept mutation{}, goal_b: {}, goal_a: {}".
                               format(mutations, goal_b, goal_a))
             else:
-                logging.debug("Greedy cannot accept mutation{}, goal_b: {}, goal_a: {}".
+                logging.info("GeneralisedGreedy cannot accept mutation{}, goal_b: {}, goal_a: {}".
                               format(mutations, goal_b, goal_a))
 
         if acceptable_index:
@@ -172,25 +188,25 @@ class GeneralisedGreedy(Greedy):
             goal_a=selected_result[2]
             self.benchmark.apply(selected_result[0])
 
-            logging.debug("chosen mutation operator: {} is ACCEPTED by acceptor: {} "
+            logging.info("chosen mutation operator: {} is ACCEPTED by acceptor: {} "
                           "with mutations {} on {}, goal_a: {}".
-                          format(self.benchmark.mutates()[selected_index].__name__, "Greedy",
+                          format(self.benchmark.mutates()[selected_index][0], "GeneralisedGreedy",
                                  selected_result[0], selected_result[1], goal_a))
 
             for _ in range(self.tau-1):
-                mutations, mutated_bits, goal_a=self.benchmark.mutates()[selected_index]()
+                mutations, mutated_bits, goal_a=self.benchmark.mutate(mutate_para[selected_index][0], *mutate_para[selected_index][1])
                 self.benchmark.apply(mutations)
 
-                logging.debug("chosen mutation operator: {} is ACCEPTED by acceptor: {} "
+                logging.info("chosen mutation operator: {} is ACCEPTED by acceptor: {} "
                               "with mutations {} on {}, goal_a: {}".
-                              format(self.benchmark.mutates()[selected_index].__name__, "Greedy",
+                              format(self.benchmark.mutates()[selected_index][0], "GeneralisedGreedy",
                                      mutations, mutated_bits, goal_a))
 
 
             return True, len(multi_result)+self.tau-1, goal_a
         else:
-            logging.debug("chosen acceptor: {} IS NOT accepted: {} with mutation {} on {}, goal_b: {}, goal_a: {}".
-                          format("Greedy", None, None, goal_b, None))
+            logging.info("chosen acceptor: {} IS NOT accepted: {} with mutation {} on {}, goal_b: {}, goal_a: {}".
+                          format(None, "GeneralisedGreedy", None, None, goal_b, None))
             return False, len(multi_result), goal_b
 
 
@@ -204,3 +220,4 @@ class GeneralisedRandomGradient(Acceptor):
 
     def __str__(self):
         return "GeneralisedRandomGradient"
+

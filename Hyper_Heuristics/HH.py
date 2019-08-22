@@ -1,5 +1,6 @@
-import sys, getopt, logging
 from Hyper_Heuristics.LeadingOne import *
+from Hyper_Heuristics.Satlib import *
+from Hyper_Heuristics.GapPath import *
 from Hyper_Heuristics.Acceptor import *
 
 class HH:

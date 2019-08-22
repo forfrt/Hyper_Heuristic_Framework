@@ -7,10 +7,10 @@ USAGE: <PROGNAME> [-h] [-b BENCHMARK] [-s] [--sat_files SAT_FILES]
                [--num_run NUM_RUN] [--log_file LOG_FILE]
                [--dump_file DUMP_FILE]
 OPTIONS:
-    -b --benchmark BENCHMARK : the benchmark to be tested on (Benchmark in {OneMax, Cliff, Jump, Sat default: OneMax}
     -s --show : show the statistic bar chart based on pervious data
     --acceptors : a list of acceptors chosen to be selected
     --acceptor_probs : probabilities of given acceptors
+    -b --benchmark BENCHMARK : the benchmark to be tested on (Benchmark in {OneMax, Cliff, Jump, Sat default: OneMax}
     --sat_files : CNF files if SAT benchmark is selected
     --num_instance : number of instance to be tested
     --num_run : number of run for each problem instance
@@ -29,7 +29,7 @@ import numpy as np
 from Hyper_Heuristics.HH import *
 from Hyper_Heuristics.Satlib import *
 from Hyper_Heuristics.Acceptor import *
-from Hyper_Heuristics.LeadingOne import *
+from Hyper_Heuristics.Benchmark import *
 
 #==============================================================================
 # Command line processing
@@ -37,11 +37,11 @@ from Hyper_Heuristics.LeadingOne import *
 def proc_cmd():
     cli=argparse.ArgumentParser()
     cli.add_argument("-b", "--benchmark",
-                     help="BENCHMARK : the benchmark to be tested on (Benchmark in {OneMax, Cliff, Jump, Sat default: Sat}")
-    cli.add_argument("--benchmark_size", default="100", help="benchmark problem size if one of [OneMax, Cliff, Jump] is selected")
+                     help="BENCHMARK : the benchmark to be tested on (Benchmark in {OneMax, Cliff, Jump, Sat, GapPath default: Sat}")
+    cli.add_argument("--benchmark_params", nargs="*", help="benchmark problem parameters if one of [OneMax, Cliff, Jump] is selected")
     cli.add_argument("--sat_files", default="./sat/", help="CNF files if SAT benchmark is selected")
     cli.add_argument("--acceptors", nargs="+", default=["am", "oi"], help="a list of acceptors chosen to be selected")
-    cli.add_argument("--acceptor_probs", nargs="+", type=float, default=[1, 1], help="probabilities of given acceptors")
+    cli.add_argument("--acceptor_probs", nargs="+", type=float, default=[1.0, 1.0], help="probabilities of given acceptors")
     cli.add_argument("--max_mutation", type=int, default="200000", help="maximum number of mutation")
     cli.add_argument("--num_instance", type=int, default=100, help="number of instance to be tested")
     cli.add_argument("--num_run", type=int, default=100, help="number of run for each problem instance")
@@ -53,11 +53,17 @@ def proc_cmd():
 
     return cli, args
 
-def test_leadingone(benchmark):
-    oneMax=OneMax(n=100, probability=0.2)
-    hh_one=HH(["am", "oi"], [0, 1], oneMax)
-    hh_one.optimize()
-    hh_one.stat()
+def test_leadingone(args):
+    print(args.benchmark, *args.benchmark_params)
+    benchmark=Benchmark.benchmark_factory(args.benchmark, *args.benchmark_params)
+    hh_lo=HH(args.acceptors, args.acceptor_probs, benchmark, args.max_mutation) # 2/n
+    hh_lo.optimize()
+    hh_lo.stat()
+
+    # oneMax=OneMax(*args.benchmark_params)
+    # hh_one=HH(args.acceptors, args.acceptor_probs, oneMax, args.max_mutation) # 2/n
+    # hh_one.optimize()
+    # hh_one.stat()
 
     # cliff=Cliff(probability=0.2, n=100, d=25)
     # hh_cliff=HH([am, oi], [0.01, 0.99], cliff)
@@ -78,7 +84,7 @@ def main():
                         format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
     logging.info(args)
 
-    if args.benchmark.lower() in ["onemax", "cliff", "jump", "sat"]:
+    if args.benchmark.lower() in ["onemax", "cliff", "jump", "sat", "gappath"]:
         if args.benchmark.lower()=='sat':
             p=pathlib.Path(args.sat_files)
             if not (p.exists() and p.is_dir()):
@@ -92,12 +98,12 @@ def main():
             else:
                 test_sat(args)
         else:
-            test_leadingone(args.benchmark, args.benchmark_size)
+            test_leadingone(args)
     else:
         warning = (
                       "*** ERROR: benchmark for Hyper-Heuristic (opt: --benchmark BENCHMARK default: Sat)! ***\n"
                       "    -- value (%s) not recognised!\n"
-                      "    -- must be one of: OneMax / Cliff / Jump / Sat "
+                      "    -- must be one of: OneMax / Cliff / Jump / Sat / GapPath "
                   )  % (args.benchmark)
         print(warning, file=sys.stderr)
         cli.print_help()
@@ -105,7 +111,6 @@ def main():
 
     if args.dump_file and args.show:
         draw_sat_stat_graph(args.dump_file)
-
 
 
 def test_sat(args):

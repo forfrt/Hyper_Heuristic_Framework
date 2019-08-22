@@ -4,6 +4,7 @@ from Hyper_Heuristics.LeadingOne import *
 class GapPath(LeadingOne):
 
     def __init__(self, n):
+        n=int(n)
         self._n=n
         self.current_solution=[0]*n
         self.current_solution[0]=1
@@ -31,7 +32,7 @@ class GapPath(LeadingOne):
         count_0=solution.count(0)
         rid=self.ridge(solution)
 
-        logging.debug("solution:{} count_0:{}, rid:{}".
+        logging.info("solution:{} count_0:{}, rid:{}".
                       format(solution, count_0, rid))
 
         if rid % 3==1:
@@ -40,7 +41,7 @@ class GapPath(LeadingOne):
             return count_0+2*rid
 
     def mutates(self):
-        return [self.flip_n(1), self.flip_n(2)]
+        return [("flip_n", [1]), ("flip_n", [2])]
 
     @property
     def current_solution(self):

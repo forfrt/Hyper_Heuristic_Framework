@@ -7,6 +7,10 @@ class Benchmark(abc.ABC):
         pass
 
     @abc.abstractmethod
+    def mutate(self):
+        pass
+
+    @abc.abstractmethod
     def mutates(self):
         pass
 
@@ -26,12 +30,16 @@ class Benchmark(abc.ABC):
     def current_solution(self, current_solution):
         self._current_solution=current_solution
 
-    # @property
-    # def current_mutation(self):
-    #     return self._current_mutation
-    #
-    # @current_mutation.setter
-    # def current_mutation(self, current_mutation):
-    #     self._current_mutation=current_mutation
+    @staticmethod
+    def benchmark_factory(class_name, *args):
+        print(all_subclasses(Benchmark))
+        for cls in all_subclasses(Benchmark):
+            if cls.__name__.lower()==class_name.lower():
+                return cls(*args)
 
+        return None
+
+def all_subclasses(cls):
+    return set(cls.__subclasses__()).\
+        union([s for c in cls.__subclasses__() for s in all_subclasses(c)])
 
