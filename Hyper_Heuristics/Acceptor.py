@@ -151,7 +151,7 @@ class Greedy(Acceptor):
 
 class GeneralisedGreedy(Greedy):
 
-    def __init__(self, benchmark, generalised_mutates=5):
+    def __init__(self, benchmark, generalised_mutates=1):
         super().__init__(benchmark)
         self.tau=generalised_mutates
 
@@ -190,8 +190,8 @@ class GeneralisedGreedy(Greedy):
 
             logging.info("chosen mutation operator: {} is ACCEPTED by acceptor: {} "
                           "with mutations {} on {}, goal_a: {}".
-                          format(self.benchmark.mutates()[selected_index][0], "GeneralisedGreedy",
-                                 selected_result[0], selected_result[1], goal_a))
+                          format(self.benchmark.mutates()[selected_index][0]+""+str(self.benchmark.mutates()[selected_index][1])
+                                 , "GeneralisedGreedy", selected_result[0], selected_result[1], goal_a))
 
             for _ in range(self.tau-1):
                 mutations, mutated_bits, goal_a=self.benchmark.mutate(mutate_para[selected_index][0], *mutate_para[selected_index][1])
@@ -199,8 +199,8 @@ class GeneralisedGreedy(Greedy):
 
                 logging.info("chosen mutation operator: {} is ACCEPTED by acceptor: {} "
                               "with mutations {} on {}, goal_a: {}".
-                              format(self.benchmark.mutates()[selected_index][0], "GeneralisedGreedy",
-                                     mutations, mutated_bits, goal_a))
+                             format(self.benchmark.mutates()[selected_index][0]+""+str(self.benchmark.mutates()[selected_index][1])
+                                    , "GeneralisedGreedy", selected_result[0], selected_result[1], goal_a))
 
 
             return True, len(multi_result)+self.tau-1, goal_a
