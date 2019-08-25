@@ -2,7 +2,7 @@
 import abc
 from random import choices, sample
 
-from Hyper_Heuristics.Benchmark import Benchmark
+from Benchmark import Benchmark
 
 
 class LeadingOne(Benchmark, abc.ABC):

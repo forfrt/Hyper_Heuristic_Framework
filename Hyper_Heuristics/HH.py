@@ -1,7 +1,7 @@
-from Hyper_Heuristics.LeadingOne import *
-from Hyper_Heuristics.Satlib import *
-from Hyper_Heuristics.GapPath import *
-from Hyper_Heuristics.Acceptor import *
+from LeadingOne import *
+from Satlib import *
+from GapPath import *
+from Acceptor import *
 
 class HH:
 

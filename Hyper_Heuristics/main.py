@@ -26,10 +26,10 @@ import matplotlib.pyplot as plt
 from math import ceil
 import numpy as np
 
-from Hyper_Heuristics.HH import *
-from Hyper_Heuristics.Satlib import *
-from Hyper_Heuristics.Acceptor import *
-from Hyper_Heuristics.Benchmark import *
+from HH import *
+from Satlib import *
+from Acceptor import *
+from Benchmark import *
 
 #==============================================================================
 # Command line processing
@@ -54,7 +54,6 @@ def proc_cmd():
     return cli, args
 
 def test_leadingone(args):
-    print(args.benchmark, *args.benchmark_params)
     benchmark=Benchmark.benchmark_factory(args.benchmark, *args.benchmark_params)
     hh_lo=HH(args.acceptors, args.acceptor_probs, benchmark, args.max_mutation) # 2/n
     hh_lo.optimize()

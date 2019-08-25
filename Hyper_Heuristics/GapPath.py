@@ -1,5 +1,5 @@
 import logging
-from Hyper_Heuristics.LeadingOne import *
+from LeadingOne import *
 
 class GapPath(LeadingOne):
 

@@ -1,5 +1,5 @@
 import re, logging
-from Hyper_Heuristics.LeadingOne import *
+from LeadingOne import *
 
 class Sat(LeadingOne):
     def __init__(self, filename):
