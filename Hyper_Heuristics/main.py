@@ -19,6 +19,7 @@ OPTIONS:
 ------------------------------------------------------------\
 """
 import os, re, sys, logging, json, argparse
+from ttictoc import TicToc
 from statistics import mean, median
 
 import matplotlib.pyplot as plt
@@ -114,24 +115,25 @@ def main():
 def test_sat(args):
 
     hh_sat=HH(args.acceptors, args.acceptor_probs, None, args.max_mutation) # 2/n
-    uf_li, (uf_mutation, uf_goal), (uf_num, uf_global_ind, uf_mutation_li, uf_goal_li)=\
+    uf_li, (uf_mutation, uf_goal, uf_runtime), (uf_num, uf_global_ind, uf_mutation_li, uf_goal_li, uf_runtime_li)=\
         opt_sat(args.sat_files, hh_sat, args.num_run)
 
-    dump_to_file(args.dump_file, uf_li=uf_li, uf_mutation=uf_mutation, uf_goal=uf_goal)
-    dump_to_file(args.dump_file, uf_num=uf_num, uf_global=uf_global_ind, uf_mutation_li=uf_mutation_li, uf_goal_li=uf_goal_li)
+    dump_to_file(args.dump_file, uf_li=uf_li, uf_mutation=uf_mutation, uf_goal=uf_goal, uf_runtime=uf_runtime)
+    dump_to_file(args.dump_file, uf_num=uf_num, uf_global=uf_global_ind,
+                 uf_mutation_li=uf_mutation_li, uf_goal_li=uf_goal_li, uf_runtime_li=uf_runtime_li)
 
-    (average_mutation, average_goal), (median_mutation, median_goal)=calculate_stat(uf_mutation_li, uf_goal_li)
+    (average_mutation, average_goal, average_runtime), (median_mutation, median_goal, median_runtime)=\
+        calculate_stat(uf_mutation_li, uf_goal_li, uf_runtime_li)
 
-    dump_to_file(args.dump_file, average_mutation=average_mutation, average_goal=average_goal,
-                 median_mutation=median_mutation, median_goal=median_goal)
+    dump_to_file(args.dump_file, average_mutation=average_mutation, average_goal=average_goal, average_runtime=average_runtime,
+                 median_mutation=median_mutation, median_goal=median_goal, median_runtime=median_runtime)
 
 def draw_sat_stat_graph(dump_file):
     num_per_subp=5
-    uf_num, average_mutation, average_goal, median_mutation, median_goal=\
+    uf_num, average_mutation, average_goal, average_runtime, median_mutation, median_goal, median_runtime=\
         loads_from_file(dump_file, "uf_num", "average_mutation", "average_goal", "median_mutation", "median_goal")
-    draw_bar_charts(num_per_subp, uf_num, average_mutation, average_goal, median_mutation, median_goal)
-
-        # average_goal, average_mutation=draw_bar_charts(num_per_subp, uf_num, uf_goal, uf_mutate)
+    draw_bar_charts(num_per_subp, uf_num, average_mutation, average_goal, average_runtime,
+                    median_mutation, median_goal, median_runtime)
 
 
 def opt_sat(sat_files, hh_sat, num_run):
@@ -145,11 +147,15 @@ def opt_sat(sat_files, hh_sat, num_run):
 
     uf_mutation=[[0]*num_run for _ in range(num_instance)]
     uf_goal=[[0]*num_run for _ in range(num_instance)]
+    uf_runtime=[[0]*num_run for _ in range(num_instance)]
 
     uf_num=[[0]*num_instance for _ in range(2)]
     uf_global_ind=[list() for _ in range(2)]
     uf_mutation_li=[[list() for _ in range(num_instance)] for _ in range(2)]
     uf_goal_li=[[list() for _ in range(num_instance)] for _ in range(2)]
+    uf_runtime_li=[[list() for _ in range(num_instance)] for _ in range(2)]
+
+    t=TicToc()
 
     for instance_id in range(num_instance):
         logging.info("======NEXT INSTANCE:{}======".format(instance_id))
@@ -160,13 +166,16 @@ def opt_sat(sat_files, hh_sat, num_run):
         for run_id in range(num_run):
 
             logging.info("------NEXT RUN:{}------".format(run_id))
+            t.tic()
             sat.reset_solution()
             hh_sat.reset_benchmark(sat)
             hh_sat.optimize()
             hh_sat.stat()
+            t.toc()
 
             uf_mutation[instance_id][run_id]=hh_sat.num_mutate
             uf_goal[instance_id][run_id]=hh_sat.max_goal
+            uf_runtime[instance_id][run_id]=t.elapsed
 
             # find global optima within max_mutate
             if hh_sat.max_goal==sat.num_cla:
@@ -174,20 +183,24 @@ def opt_sat(sat_files, hh_sat, num_run):
                 uf_global_ind[0].append((instance_id, run_id))
                 uf_mutation_li[0][instance_id].append(hh_sat.num_mutate)
                 uf_goal_li[0][instance_id].append(hh_sat.max_goal)
+                uf_runtime_li[0][instance_id].append(t.elapsed)
             # didn't find global optima within max_mutate
             else:
                 uf_num[1][instance_id]+=1
                 uf_global_ind[1].append((instance_id, run_id))
                 uf_mutation_li[1][instance_id].append(hh_sat.num_mutate)
                 uf_goal_li[1][instance_id].append(hh_sat.max_goal)
+                uf_runtime_li[1][instance_id].append(t.elapsed)
 
-    return uf_li, (uf_mutation, uf_goal), (uf_num, uf_global_ind, uf_mutation_li, uf_goal_li)
+    return uf_li, (uf_mutation, uf_goal, uf_runtime), (uf_num, uf_global_ind, uf_mutation_li, uf_goal_li, uf_runtime_li)
 
-def calculate_stat(uf_mutation_li, uf_goal_li):
+def calculate_stat(uf_mutation_li, uf_goal_li, uf_runtime_li):
     average_goal=[list() for _ in range(2)]
     median_goal=[list() for _ in range(2)]
     average_mutation=[list() for _ in range(2)]
     median_mutation=[list() for _ in range(2)]
+    average_runtime=[list() for _ in range(2)]
+    median_runtime=[list() for _ in range(2)]
 
     for instance_id in range(len(uf_mutation_li[0])):
         for suc_id in range(2):
@@ -205,10 +218,18 @@ def calculate_stat(uf_mutation_li, uf_goal_li):
                 average_goal[suc_id].append(0)
                 median_goal[suc_id].append(0)
 
-    return (average_mutation, average_goal), (median_mutation, median_goal)
+            if uf_runtime_li[suc_id][instance_id]:
+                average_runtime[suc_id].append(mean(uf_runtime_li[suc_id][instance_id]))
+                median_runtime[suc_id].append(median(uf_runtime_li[suc_id][instance_id]))
+            else:
+                average_runtime[suc_id].append(0)
+                median_runtime[suc_id].append(0)
+
+    return (average_mutation, average_goal, average_runtime), (median_mutation, median_goal, median_runtime)
 
 
-def draw_bar_charts(inst_per_subp, uf_num, average_mutation, average_goal, median_mutation, median_goal):
+def draw_bar_charts(inst_per_subp, uf_num, average_mutation, average_goal, average_runtime,
+                    median_mutation, median_goal, median_runtime):
 
     width=0.35
 
