@@ -3,7 +3,7 @@
 USAGE: <PROGNAME> [-h] [-b BENCHMARK] [-s] [--sat_files SAT_FILES]
                [--acceptors ACCEPTORS [ACCEPTORS ...]]
                [--acceptor_probs ACCEPTOR_PROBS [ACCEPTOR_PROBS ...]]
-               [--max_mutation MAX_MUTATION] [--num_instance NUM_INSTANCE]
+               [--max_mutation MAX_MUTATION]
                [--num_run NUM_RUN] [--log_file LOG_FILE]
                [--dump_file DUMP_FILE]
 OPTIONS:
@@ -12,14 +12,13 @@ OPTIONS:
     --acceptor_probs : probabilities of given acceptors
     -b --benchmark BENCHMARK : the benchmark to be tested on (Benchmark in {OneMax, Cliff, Jump, Sat default: OneMax}
     --sat_files : CNF files if SAT benchmark is selected
-    --num_instance : number of instance to be tested
     --num_run : number of run for each problem instance
     --log_file : logging file
     --dump_file : file that store the json.dumps() result
     --max_mutation : maximum number of mutation
 ------------------------------------------------------------\
 """
-import logging, json, argparse, pathlib
+import os, re, sys, logging, json, argparse
 from statistics import mean, median
 
 import matplotlib.pyplot as plt
@@ -43,7 +42,6 @@ def proc_cmd():
     cli.add_argument("--acceptors", nargs="+", default=["am", "oi"], help="a list of acceptors chosen to be selected")
     cli.add_argument("--acceptor_probs", nargs="+", type=float, default=[1.0, 1.0], help="probabilities of given acceptors")
     cli.add_argument("--max_mutation", type=int, default="200000", help="maximum number of mutation")
-    cli.add_argument("--num_instance", type=int, default=100, help="number of instance to be tested")
     cli.add_argument("--num_run", type=int, default=100, help="number of run for each problem instance")
     cli.add_argument("--log_file", default="hh.log", help="logging file")
     cli.add_argument("--dump_file", default="hh_data.dump", help="file that store the json.dumps() result")
@@ -85,8 +83,9 @@ def main():
 
     if args.benchmark.lower() in ["onemax", "cliff", "jump", "sat", "gappath"]:
         if args.benchmark.lower()=='sat':
-            p=pathlib.Path(args.sat_files)
-            if not (p.exists() and p.is_dir()):
+            p, pattern=os.path.split(args.sat_files)
+            print(p, pattern)
+            if not (os.path.exists(p) and os.path.isdir(p)):
                 warning = ( "*** ERROR: directory for sat files (opt: --sat_files SAT_DIR default: ./sat)! ***\n"
                             "    -- path (%s) not exists!\n"
                             "    -- must be a existent directory"
@@ -115,10 +114,10 @@ def main():
 def test_sat(args):
 
     hh_sat=HH(args.acceptors, args.acceptor_probs, None, args.max_mutation) # 2/n
-    (uf_mutation, uf_goal), (uf_num, uf_global_ind, uf_mutation_li, uf_goal_li)=\
-        opt_sat(args.sat_files, hh_sat, args.num_instance, args.num_run)
+    uf_li, (uf_mutation, uf_goal), (uf_num, uf_global_ind, uf_mutation_li, uf_goal_li)=\
+        opt_sat(args.sat_files, hh_sat, args.num_run)
 
-    dump_to_file(args.dump_file, uf_mutation=uf_mutation, uf_goal=uf_goal)
+    dump_to_file(args.dump_file, uf_li=uf_li, uf_mutation=uf_mutation, uf_goal=uf_goal)
     dump_to_file(args.dump_file, uf_num=uf_num, uf_global=uf_global_ind, uf_mutation_li=uf_mutation_li, uf_goal_li=uf_goal_li)
 
     (average_mutation, average_goal), (median_mutation, median_goal)=calculate_stat(uf_mutation_li, uf_goal_li)
@@ -135,9 +134,14 @@ def draw_sat_stat_graph(dump_file):
         # average_goal, average_mutation=draw_bar_charts(num_per_subp, uf_num, uf_goal, uf_mutate)
 
 
-def opt_sat(dir_name, hh_sat, num_instance, num_run):
+def opt_sat(sat_files, hh_sat, num_run):
 
-    uf_li=list(pathlib.Path(dir_name).glob("**/*.cnf"))
+    # uf_li=list(pathlib.Path(dir_name).glob("**/*.cnf"))
+
+    p, pattern=os.path.split(sat_files)
+    uf_li=[os.path.join(p, x) for x in os.listdir(p) if re.fullmatch(pattern, x)]
+    num_instance=len(uf_li)
+
 
     uf_mutation=[[0]*num_run for _ in range(num_instance)]
     uf_goal=[[0]*num_run for _ in range(num_instance)]
@@ -177,7 +181,7 @@ def opt_sat(dir_name, hh_sat, num_instance, num_run):
                 uf_mutation_li[1][instance_id].append(hh_sat.num_mutate)
                 uf_goal_li[1][instance_id].append(hh_sat.max_goal)
 
-    return (uf_mutation, uf_goal), (uf_num, uf_global_ind, uf_mutation_li, uf_goal_li)
+    return uf_li, (uf_mutation, uf_goal), (uf_num, uf_global_ind, uf_mutation_li, uf_goal_li)
 
 def calculate_stat(uf_mutation_li, uf_goal_li):
     average_goal=[list() for _ in range(2)]

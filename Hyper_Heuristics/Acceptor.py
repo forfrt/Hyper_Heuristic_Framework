@@ -98,6 +98,21 @@ class IE(Acceptor):
 class Greedy(Acceptor):
     def __init__(self, benchmark):
         super().__init__(benchmark)
+        self.pool=None
+        self.num_mutation=None
+        if(benchmark):
+            self.num_mutation=len(benchmark.mutates())
+            self.pool=Pool(processes=self.num_mutation)
+
+    @property
+    def benchmark(self):
+        return self._benchmark
+
+    @benchmark.setter
+    def benchmark(self, benchmark):
+        self._benchmark=benchmark
+        if self.pool:
+            self.pool.close()
         self.num_mutation=len(benchmark.mutates())
         self.pool=Pool(processes=self.num_mutation)
 
